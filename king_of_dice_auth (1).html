@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>King of Dice — Login</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+
+<!-- ════════════════════════════════════════════════
+  FIREBASE SETUP — YEH 3 LINES APNI CONFIG SE REPLACE KAR
+  Firebase Console → Project Settings → Your Apps → SDK snippet
+  ════════════════════════════════════════════════ -->
+<script type="module">
+  import { initializeApp }          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, signInAnonymously, GoogleAuthProvider,
+           FacebookAuthProvider, signInWithPopup,
+           onAuthStateChanged, updateProfile }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, doc, setDoc, getDoc, serverTimestamp }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  /* ── FIREBASE CONFIG ── */
+  const firebaseConfig = {
+    apiKey:            "AIzaSyBz1Xr9TG4prHu5FJNNZDqFWYj2BAUk9Bs",
+    authDomain:        "king-of-dice-b4139.firebaseapp.com",
+    projectId:         "king-of-dice-b4139",
+    storageBucket:     "king-of-dice-b4139.firebasestorage.app",
+    messagingSenderId: "682841840665",
+    appId:             "1:682841840665:web:6fc0f9e9be31a9fead1e88"
+  };
+  /* ───────────────────── */
+
+  const app  = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+
+  const googleProvider   = new GoogleAuthProvider();
+  const facebookProvider = new FacebookAuthProvider();
+
+  /* ══ Ek baar login hua toh game pe bhejo ══ */
+  onAuthStateChanged(auth, async user => {
+    if (user) {
+      await saveUserProfile(user);
+      showLoggedIn(user);
+    }
+  });
+
+  /* ══ Firestore mein user profile save karo ══ */
+  async function saveUserProfile(user) {
+    const ref  = doc(db, "users", user.uid);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      await setDoc(ref, {
+        uid:        user.uid,
+        name:       user.displayName || "Guest_" + Math.floor(Math.random()*9999),
+        avatar:     user.photoURL    || null,
+        provider:   user.providerData[0]?.providerId || "anonymous",
+        coins:      500,
+        gems:       10,
+        wins:       0,
+        losses:     0,
+        streak:     0,
+        level:      1,
+        createdAt:  serverTimestamp(),
+        lastSeen:   serverTimestamp(),
+      });
+    } else {
+      await setDoc(ref, { lastSeen: serverTimestamp() }, { merge: true });
+    }
+  }
+
+  /* ══ UI mein logged-in state dikhao ══ */
+  function showLoggedIn(user) {
+    const name   = user.displayName || ("Guest_" + user.uid.slice(0,5));
+    const avatar = user.photoURL;
+    document.getElementById('user-name').textContent    = name;
+    document.getElementById('user-provider').textContent =
+      user.isAnonymous ? "Guest account" :
+      user.providerData[0]?.providerId === "google.com" ? "Google account" : "Facebook account";
+    if (avatar) {
+      const img = document.getElementById('user-avatar');
+      img.style.backgroundImage = `url(${avatar})`;
+      img.style.backgroundSize  = 'cover';
+      img.textContent = '';
+    }
+    document.getElementById('auth-screen').style.display  = 'none';
+    document.getElementById('ready-screen').style.display = 'flex';
+  }
+
+  /* ══ GUEST LOGIN ══ */
+  window.loginGuest = async () => {
+    setLoading('btn-guest', true);
+    try {
+      const result = await signInAnonymously(auth);
+      await updateProfile(result.user, {
+        displayName: "Guest_" + Math.floor(Math.random()*9999)
+      });
+    } catch(e) {
+      showError(e.message);
+    } finally { setLoading('btn-guest', false); }
+  };
+
+  /* ══ GOOGLE LOGIN ══ */
+  window.loginGoogle = async () => {
+    setLoading('btn-google', true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch(e) {
+      if (e.code !== 'auth/popup-closed-by-user') showError(e.message);
+    } finally { setLoading('btn-google', false); }
+  };
+
+  /* ══ FACEBOOK LOGIN ══ */
+  window.loginFacebook = async () => {
+    setLoading('btn-facebook', true);
+    try {
+      await signInWithPopup(auth, facebookProvider);
+    } catch(e) {
+      if (e.code !== 'auth/popup-closed-by-user') showError(e.message);
+    } finally { setLoading('btn-facebook', false); }
+  };
+
+  /* ══ Game pe jao ══ */
+  window.goToGame = () => {
+    /* Apna game file ka naam yahan daal */
+    window.location.href = 'king_of_dice_v6.html';
+  };
+
+  /* ══ Helpers ══ */
+  function setLoading(id, on) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.disabled = on;
+    btn.querySelector('.btn-text').style.opacity = on ? '0' : '1';
+    btn.querySelector('.btn-spinner').style.display = on ? 'block' : 'none';
+  }
+  function showError(msg) {
+    const el = document.getElementById('error-msg');
+    el.textContent = '⚠️ ' + (msg.includes('Firebase') ? 'Config check karo — Firebase setup incomplete' : msg);
+    el.style.display = 'block';
+    setTimeout(() => el.style.display = 'none', 4000);
+  }
+</script>
+
+<style>
+:root {
+  --gold: #FFD700; --gold2: #FFA000; --gold3: #FF6F00;
+  --accent: #7C5CFC; --accent2: #A78BFA;
+  --bg-grad: linear-gradient(160deg,#06082b 0%,#0c1660 45%,#0e2070 100%);
+}
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; font-family: 'Nunito', sans-serif; color: #fff; overflow: hidden; }
+body { background: var(--bg-grad); }
+
+/* ═══ ANIMATED BACKGROUND ═══ */
+#particle-canvas {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  width: 100%; height: 100%;
+}
+.glow-blob {
+  position: fixed; border-radius: 50%; filter: blur(80px);
+  pointer-events: none; z-index: 0; animation: blobDrift 8s ease-in-out infinite;
+}
+.blob1 { width: 400px; height: 400px; top: -100px; left: -100px; background: rgba(124,92,252,.12); }
+.blob2 { width: 300px; height: 300px; bottom: -80px; right: -80px; background: rgba(255,160,0,.09); animation-delay: -4s; }
+@keyframes blobDrift {
+  0%,100% { transform: translate(0,0) scale(1); }
+  33%      { transform: translate(30px,-20px) scale(1.05); }
+  66%      { transform: translate(-20px,15px) scale(.97); }
+}
+
+/* ═══ SCREENS ═══ */
+#auth-screen, #ready-screen {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 20px;
+}
+#ready-screen { display: none; }
+
+/* ═══ AUTH CARD ═══ */
+.auth-card {
+  width: 100%; max-width: 380px;
+  background: rgba(6,10,50,.82);
+  border: 1.5px solid rgba(255,255,255,.13);
+  border-radius: 28px;
+  padding: 32px 24px 28px;
+  backdrop-filter: blur(24px);
+  box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(124,92,252,.12);
+  animation: cardIn .5s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes cardIn { from { transform: translateY(30px) scale(.95); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ═══ LOGO ═══ */
+.logo-wrap {
+  display: flex; flex-direction: column; align-items: center; margin-bottom: 24px;
+}
+.logo-dice-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.logo-dice {
+  font-size: 26px; filter: drop-shadow(0 0 12px rgba(255,215,0,.7));
+  animation: diceFloat 2.8s ease-in-out infinite;
+}
+.logo-dice:last-child { animation-delay: 1.4s; }
+@keyframes diceFloat {
+  0%,100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-6px) rotate(8deg); }
+}
+.logo-title {
+  font-family: 'Fredoka One', cursive;
+  font-size: 38px; letter-spacing: 4px;
+  background: linear-gradient(160deg,#fff 0%,#FFD700 40%,#FF8C00 80%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  filter: drop-shadow(0 3px 18px rgba(255,140,0,.45));
+  line-height: 1;
+}
+.logo-sub {
+  font-size: 10px; font-weight: 900; letter-spacing: 5px;
+  color: rgba(255,255,255,.35); text-transform: uppercase; margin-top: 4px;
+}
+
+/* ═══ SECTION LABELS ═══ */
+.section-divider {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 16px;
+}
+.section-divider::before, .section-divider::after {
+  content: ''; flex: 1; height: 1px; background: rgba(255,255,255,.1);
+}
+.section-divider span {
+  font-size: 10px; font-weight: 900; letter-spacing: 2px;
+  color: rgba(255,255,255,.35); text-transform: uppercase; white-space: nowrap;
+}
+
+/* ═══ LOGIN BUTTONS ═══ */
+.login-btn {
+  width: 100%; display: flex; align-items: center; justify-content: center;
+  gap: 12px; padding: 14px 20px; border-radius: 16px;
+  border: 1.5px solid rgba(255,255,255,.15);
+  font-family: 'Nunito', sans-serif; font-size: 15px;
+  font-weight: 900; color: #fff; cursor: pointer;
+  position: relative; overflow: hidden;
+  transition: transform .13s, box-shadow .13s;
+  margin-bottom: 10px;
+}
+.login-btn:last-child { margin-bottom: 0; }
+.login-btn:disabled { opacity: .6; cursor: not-allowed; }
+.login-btn:not(:disabled):active { transform: scale(.96); }
+.login-btn::after {
+  content: ''; position: absolute; top: 0; left: -75%;
+  width: 50%; height: 100%;
+  background: linear-gradient(90deg,transparent,rgba(255,255,255,.10),transparent);
+  transform: skewX(-20deg); transition: left .4s;
+}
+.login-btn:not(:disabled):hover::after { left: 140%; }
+
+#btn-guest {
+  background: linear-gradient(135deg,#2a2a5a,#3a3a7a);
+  box-shadow: 0 6px 20px rgba(0,0,0,.4);
+}
+#btn-google {
+  background: linear-gradient(135deg,#1a3a6a,#1e50a0);
+  box-shadow: 0 6px 20px rgba(30,80,160,.35);
+  border-color: rgba(66,133,244,.35);
+}
+#btn-facebook {
+  background: linear-gradient(135deg,#1a2a6a,#1877F2);
+  box-shadow: 0 6px 20px rgba(24,119,242,.35);
+  border-color: rgba(24,119,242,.4);
+}
+
+.btn-icon { font-size: 22px; flex-shrink: 0; }
+.btn-text { font-size: 14px; font-weight: 900; }
+.btn-spinner {
+  display: none; width: 18px; height: 18px; border-radius: 50%;
+  border: 2.5px solid rgba(255,255,255,.25); border-top-color: #fff;
+  animation: spin .7s linear infinite; position: absolute;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Google SVG icon */
+.google-icon { width: 20px; height: 20px; flex-shrink: 0; }
+
+/* Facebook icon */
+.fb-icon { font-size: 22px; color: #fff; font-weight: 900; flex-shrink: 0; }
+
+/* ═══ GUEST NOTE ═══ */
+.guest-note {
+  font-size: 10px; color: rgba(255,255,255,.3); text-align: center;
+  margin-top: 16px; font-weight: 700; line-height: 1.5;
+}
+.guest-note strong { color: rgba(255,215,0,.6); font-weight: 900; }
+
+/* ═══ ERROR MSG ═══ */
+#error-msg {
+  display: none; background: rgba(239,68,68,.18);
+  border: 1px solid rgba(239,68,68,.4);
+  border-radius: 12px; padding: 10px 14px;
+  font-size: 12px; font-weight: 700; color: #fca5a5;
+  margin-top: 14px; text-align: center;
+}
+
+/* ═══ READY SCREEN ═══ */
+.ready-card {
+  width: 100%; max-width: 340px;
+  background: rgba(6,10,50,.85);
+  border: 1.5px solid rgba(255,215,0,.25);
+  border-radius: 28px; padding: 36px 28px;
+  text-align: center;
+  backdrop-filter: blur(24px);
+  box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 30px rgba(255,215,0,.08);
+  animation: cardIn .5s cubic-bezier(.34,1.56,.64,1);
+}
+#user-avatar {
+  width: 80px; height: 80px; border-radius: 22px;
+  background: linear-gradient(135deg,#7C5CFC,#A78BFA);
+  border: 3px solid rgba(167,139,250,.5);
+  box-shadow: 0 0 28px rgba(124,92,252,.45);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 38px; margin: 0 auto 16px;
+  background-size: cover; background-position: center;
+}
+#user-name {
+  font-family: 'Fredoka One', cursive;
+  font-size: 22px; letter-spacing: 1px; margin-bottom: 4px;
+  background: linear-gradient(135deg,#fff,#FFD700);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+#user-provider { font-size: 11px; color: rgba(255,255,255,.4); font-weight: 700; margin-bottom: 28px; }
+.ready-sub { font-size: 13px; color: rgba(255,255,255,.5); margin-bottom: 22px; font-weight: 700; }
+
+.go-btn {
+  width: 100%; padding: 16px;
+  background: linear-gradient(135deg,#FFD700,#FF8C00);
+  border: none; border-radius: 18px;
+  font-family: 'Nunito', sans-serif; font-size: 16px;
+  font-weight: 900; color: #160040; cursor: pointer;
+  box-shadow: 0 8px 28px rgba(255,160,0,.45);
+  transition: transform .13s, box-shadow .13s;
+  letter-spacing: .5px;
+}
+.go-btn:active { transform: scale(.96); box-shadow: 0 4px 14px rgba(255,160,0,.3); }
+
+.coin-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(255,215,0,.12); border: 1px solid rgba(255,215,0,.3);
+  border-radius: 20px; padding: 5px 14px; font-size: 13px;
+  font-weight: 900; color: #FFD700; margin-bottom: 20px;
+}
+
+/* ═══ SETUP HINT (dev mode only) ═══ */
+#setup-hint {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: rgba(255,61,0,.9); border-radius: 12px; padding: 8px 16px;
+  font-size: 11px; font-weight: 800; color: #fff; z-index: 100;
+  text-align: center; max-width: 340px;
+  animation: hintPop .4s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes hintPop { from { transform: translateX(-50%) scale(.8) translateY(20px); opacity:0; } to { transform: translateX(-50%) scale(1) translateY(0); opacity:1; } }
+</style>
+</head>
+<body>
+
+<!-- Animated background -->
+<div class="glow-blob blob1"></div>
+<div class="glow-blob blob2"></div>
+<canvas id="particle-canvas"></canvas>
+
+<!-- ══════════════════════════════════════════
+     AUTH SCREEN
+══════════════════════════════════════════ -->
+<div id="auth-screen">
+  <div class="auth-card">
+
+    <!-- Logo -->
+    <div class="logo-wrap">
+      <div class="logo-dice-row">
+        <span class="logo-dice">🎲</span>
+        <span class="logo-title">KING</span>
+        <span class="logo-dice">🎲</span>
+      </div>
+      <span class="logo-title" style="font-size:28px;letter-spacing:2px">OF DICE</span>
+      <span class="logo-sub">Multiplayer Edition</span>
+    </div>
+
+    <!-- Guest Button -->
+    <div class="section-divider"><span>Quick start</span></div>
+
+    <button class="login-btn" id="btn-guest" onclick="loginGuest()">
+      <span class="btn-icon">👤</span>
+      <span class="btn-text">Guest ke roop mein khelo</span>
+      <div class="btn-spinner"></div>
+    </button>
+
+    <!-- Social Buttons -->
+    <div class="section-divider" style="margin-top:18px"><span>Ya sign in karo</span></div>
+
+    <button class="login-btn" id="btn-google" onclick="loginGoogle()">
+      <!-- Google official SVG icon -->
+      <svg class="google-icon" viewBox="0 0 48 48">
+        <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>
+        <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 19.001 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/>
+        <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/>
+        <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/>
+      </svg>
+      <span class="btn-text">Google se login karo</span>
+      <div class="btn-spinner"></div>
+    </button>
+
+    <button class="login-btn" id="btn-facebook" onclick="loginFacebook()">
+      <svg class="google-icon" viewBox="0 0 48 48">
+        <path fill="#3F51B5" d="M42 37c0 2.762-2.238 5-5 5H11c-2.761 0-5-2.238-5-5V11c0-2.762 2.239-5 5-5h26c2.762 0 5 2.238 5 5v26z"/>
+        <path fill="#fff" d="M34.368 25H31v13h-5V25h-3v-4h3v-2.41c.002-3.508 1.459-5.59 5.592-5.59H35v4h-2.287C31.104 17 31 17.6 31 18.723V21h4l-.632 4z"/>
+      </svg>
+      <span class="btn-text">Facebook se login karo</span>
+      <div class="btn-spinner"></div>
+    </button>
+
+    <!-- Guest note -->
+    <p class="guest-note">
+      Guest account ka progress <strong>save nahi hoga</strong> app close karne ke baad.<br>
+      Permanent account ke liye Google ya Facebook use karo.
+    </p>
+
+    <!-- Error -->
+    <div id="error-msg"></div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     READY SCREEN — login ke baad dikhta hai
+══════════════════════════════════════════ -->
+<div id="ready-screen">
+  <div class="ready-card">
+    <div id="user-avatar">🎮</div>
+    <div id="user-name">Player</div>
+    <div id="user-provider">Account</div>
+    <div class="coin-badge">🪙 500 coins mile welcome gift!</div>
+    <p class="ready-sub">Sab set hai — game shuru karte hain?</p>
+    <button class="go-btn" onclick="goToGame()">🎲 &nbsp; GAME SHURU KARO</button>
+  </div>
+</div>
+
+<!-- Setup hint — Firebase config missing ho toh dikhata hai -->
+<div id="setup-hint">
+  ⚙️ Pehle Firebase config fill karo — code mein "YOUR_API_KEY" replace karo
+</div>
+
+<script>
+/* ══ Particle background ══ */
+(function() {
+  const cv = document.getElementById('particle-canvas');
+  const ctx = cv.getContext('2d');
+  let W, H, particles = [];
+  const COLORS = ['rgba(255,215,0,','rgba(124,92,252,','rgba(255,107,157,','rgba(79,195,247,'];
+  function resize() { W = cv.width = innerWidth; H = cv.height = innerHeight; }
+  function mkP() {
+    return { x:Math.random()*W, y:H+10, r:1+Math.random()*3,
+             vy:-(0.3+Math.random()*.7), vx:(Math.random()-.5)*.3,
+             a:0.06+Math.random()*.18, col:COLORS[Math.floor(Math.random()*COLORS.length)],
+             ph:Math.random()*Math.PI*2, ps:0.02+Math.random()*.02 };
+  }
+  resize();
+  particles = Array.from({length:50},mkP).map(p=>({...p,y:Math.random()*H}));
+  window.addEventListener('resize',resize);
+  (function loop(){
+    ctx.clearRect(0,0,W,H);
+    particles.forEach((p,i)=>{
+      p.y+=p.vy; p.x+=p.vx; p.ph+=p.ps;
+      const a=p.a*(0.6+0.4*Math.sin(p.ph));
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=p.col+a+')'; ctx.fill();
+      if(p.y<-10) particles[i]=mkP();
+    });
+    requestAnimationFrame(loop);
+  })();
+})();
+
+/* ══ Config check — setup hint hide karo agar real config dala ══ */
+window.addEventListener('load', () => {
+  const hint = document.getElementById('setup-hint');
+  setTimeout(() => {
+    const scripts = document.querySelectorAll('script[type="module"]');
+    let hasConfig = false;
+    scripts.forEach(s => {
+      if (s.textContent.includes('YOUR_API_KEY')) return;
+      hasConfig = true;
+    });
+    if (!hasConfig) hint.style.display = 'block';
+    else hint.style.display = 'none';
+  }, 500);
+});
+</script>
+</body>
+</html>
